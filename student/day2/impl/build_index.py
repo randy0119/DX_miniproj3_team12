@@ -7,9 +7,9 @@ Day2 인덱싱 엔트리포인트
 import os, argparse, numpy as np
 from typing import List
 
-from kt_aivle.sub_agents.day2.impl.ingest import build_corpus, save_docs_jsonl
-from kt_aivle.sub_agents.day2.impl.embeddings import Embeddings
-from kt_aivle.sub_agents.day2.impl.store import FaissStore  # 제공됨
+from student.day2.impl.ingest import build_corpus, save_docs_jsonl
+from student.day2.impl.embeddings import Embeddings
+from student.day2.impl.store import FaissStore  # 제공됨
 
 
 def build_index(paths: List[str], index_dir: str, model: str | None = None, batch_size: int = 128):
@@ -36,8 +36,25 @@ def build_index(paths: List[str], index_dir: str, model: str | None = None, batc
     #  - store = FaissStore(...); store.add(...); store.save()
     #  - save_docs_jsonl(corpus, docs_path)
     # ----------------------------------------------------------------------------
-    raise NotImplementedError("TODO[DAY2-I-01]: 인덱싱 파이프라인 구현")
+    corpus = build_corpus(paths)
+    if len(corpus) == 0:
+      raise ValueError("인덱싱할 문서가 없습니다.")
 
+    texts = [item["text"] for item in corpus]
+
+    emb = Embeddings(model=model, batch_size=batch_size)
+    vecs = emb.encode(texts)
+
+    os.makedirs(index_dir, exist_ok=True)
+    index_path = os.path.join(index_dir, "faiss.index")
+    docs_path = os.path.join(index_dir, "docs.jsonl")
+
+    store = FaissStore(dim=vecs.shape[1], index_path=index_path, docs_path=docs_path)
+    store.add(vecs, corpus)
+    store.save()
+
+    save_docs_jsonl(corpus, docs_path)
+   
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
@@ -52,4 +69,13 @@ if __name__ == "__main__":
     #  - os.makedirs(args.index_dir, exist_ok=True)
     #  - build_index(args.paths, args.index_dir, args.model, args.batch_size)
     # ----------------------------------------------------------------------------
-    raise NotImplementedError("TODO[DAY2-I-02]: CLI 엔트리포인트 구현")
+    os.makedirs(args.index_dir, exist_ok=True)
+
+    build_index(
+        paths=args.paths,
+        index_dir=args.index_dir,
+        model=args.model,
+        batch_size=args.batch_size,
+    )
+
+    print(f"✅ 인덱싱 완료! 저장 경로: {args.index_dir}")
