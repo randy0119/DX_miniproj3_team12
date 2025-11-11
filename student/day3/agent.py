@@ -17,11 +17,12 @@ from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
 
 # Day3 본체
-from kt_aivle.sub_agents.day3.impl.agent import Day3Agent
+from student.day3.impl.agent import Day3Agent
 # 공용 렌더/저장/스키마
-from kt_aivle.sub_agents.common.fs_utils import save_markdown
-from kt_aivle.sub_agents.common.writer import render_day3, render_enveloped
-from kt_aivle.sub_agents.common.schemas import Day3Plan
+from student.common.fs_utils import save_markdown
+from student.common.writer import render_day3, render_enveloped
+from student.common.schemas import Day3Plan
+
 
 
 # ------------------------------------------------------------------------------
@@ -29,7 +30,8 @@ from kt_aivle.sub_agents.common.schemas import Day3Plan
 #  - 경량 LLM 식별자를 정해 MODEL에 넣으세요. (예: "openai/gpt-4o-mini")
 #  - LiteLlm(model=...) 형태로 초기화합니다.
 # ------------------------------------------------------------------------------
-MODEL = None  # <- LiteLlm(...)
+MODEL = LiteLlm(model="openai/gpt-4o-mini")
+
 
 
 # ------------------------------------------------------------------------------
@@ -43,8 +45,29 @@ MODEL = None  # <- LiteLlm(...)
 #   {"type":"gov_notices","query":"...", "items":[{title, url, deadline, agency, ...}, ...]}
 # ------------------------------------------------------------------------------
 def _handle(query: str) -> Dict[str, Any]:
-    # 여기에 구현
-    raise NotImplementedError("TODO[DAY3-A-02]: Day3Plan/Day3Agent 구성 후 handle() 호출해 payload 반환")
+    # 1) 수집 전략(Plan): 소스별 상위 k개만 가져오고, 부족하면 웹 폴백 사용
+    plan = Day3Plan(
+        nipa_topk=3,        # NIPA 상위 3건
+        bizinfo_topk=2,     # Bizinfo 상위 2건
+        web_topk=2,         # 일반 웹 보조 2건
+        use_web_fallback=True
+    )
+
+    # 2) Day3 본체 에이전트 생성 (키/설정은 본체에서 환경변수로 처리)
+    agent = Day3Agent()
+
+    # 3) 본체 파이프라인 실행 → 표준 payload 반환
+    #    예: {"type": "gov_notices", "query": "...", "items": [ ... ]}
+    payload: Dict[str, Any] = agent.handle(query, plan)
+
+    # 기본 안전성: 최소 스키마 보장
+    if not isinstance(payload, dict):
+        payload = {"type": "gov_notices", "query": query, "items": []}
+    payload.setdefault("type", "gov_notices")
+    payload.setdefault("query", query)
+    payload.setdefault("items", [])
+
+    return payload
 
 
 # ------------------------------------------------------------------------------
@@ -61,12 +84,41 @@ def _handle(query: str) -> Dict[str, Any]:
 # ------------------------------------------------------------------------------
 def before_model_callback(
     callback_context: CallbackContext,
-    llm_request: LlmRequest,
+    llm_request: LlmRequest
     **kwargs,
-) -> Optional[LlmResponse]:
-    # 여기에 구현
-    raise NotImplementedError("TODO[DAY3-A-03]: query 추출 → _handle → 렌더/저장/envelope → LlmResponse")
+) -> Optional[LlmResponse]: 
+    try:
+        # 1️⃣ 최근 메시지에서 query 추출
+        query = llm_request.messages[-1].content.strip()
 
+        # 2️⃣ _handle(query) 실행하여 payload(dict) 생성
+        payload = _handle(query)
+
+        # 3️⃣ 본문 렌더링 (Markdown 형식)
+        rendered_md = render_day3(query, payload)
+
+        # 4️⃣ 파일 저장
+        saved_path = save_markdown(
+            query=query,
+            route="day3",
+            markdown=rendered_md
+        )
+
+        # 5️⃣ envelope로 감싸기
+        envelope = render_enveloped(
+            kind="day3",
+            query=query,
+            payload=payload,
+            saved_path=saved_path
+        )
+
+        # 6️⃣ 최종 응답 객체 반환
+        return LlmResponse.from_envelope(envelope)
+
+    except Exception as e:
+        # 예외 처리: 오류 메시지를 간단히 반환
+        error_msg = f"Day3 에러 발생: {e}"
+        return LlmResponse.from_text(error_msg)
 
 # ------------------------------------------------------------------------------
 # TODO[DAY3-A-04] 에이전트 메타데이터:
@@ -76,8 +128,10 @@ def before_model_callback(
 day3_gov_agent = Agent(
     name="Day3GovAgent",                        # <- 필요 시 수정
     model=MODEL,                                # <- TODO[DAY3-A-01]에서 설정
-    description="정부사업 공고/바우처 정보 수집 및 표 제공",   # <- 필요 시 수정
-    instruction="질의를 기반으로 정부/공공 포털에서 관련 공고를 수집하고 표로 요약해라.",
+    description="정부·공공 RFP·지원사업 정보를 자동 수집 및 요약 제공하는 에이전트",   # <- 필요 시 수정
+    instruction= "사용자 질의를 받아 관련 정부·공공 공고를 자동 검색하고, "
+        "제목·URL·마감일·주관기관 등 핵심 정보를 표 형태로 요약하라. "
+        "최신 공고를 중심으로 정리하고 Markdown으로 출력하라.",
     tools=[],
     before_model_callback=before_model_callback,
 )
