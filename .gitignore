@@ -2,7 +2,14 @@
 .env
 uv.lock
 data/processed/
-student/common/__pycache__
-student/day2/__pycache__
-student/day2/impl/__pycache__
-student/day1/__pycache__
+student/common/__pycache__/
+student/day2/__pycache__/
+student/day2/impl/__pycache__/
+student/day1/__pycache__/
+student/common/__pycache__/
+indices/
+
+# Python cache & compiled files
+__pycache__/
+*.py[cod]
+*$py.class

@@ -94,3 +94,25 @@ class GovNoticesModel(BaseModel):
     
 GovNoticeItem = GovNoticeItemModel
 GovNotices = GovNoticesModel
+
+# -------------------------
+# Day5: RAG Plan
+# -------------------------
+@dataclass
+class Day5Plan:
+    index_dir: str = "indices/day5"
+    min_score: float = 0.15
+    min_mean_topk: float = 0.2
+    return_draft_when_enough: bool = True
+    force_rag_only: bool = False
+    top_k: int = 10
+    max_context: int = 2000
+    embedding_model: str = "text-embedding-3-small"
+
+# (선택) RAG Context 아이템도 dataclass를 쓸 경우 예시
+@dataclass
+class RagContextItem:
+    doc_id: str                    # <- 기본값 없음
+    score: float                   # <- 기본값 없음
+    chunk: str = ""
+    meta: dict = field(default_factory=dict)

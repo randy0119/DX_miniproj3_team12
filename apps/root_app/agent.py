@@ -15,6 +15,7 @@ from google.adk.models.lite_llm import LiteLlm
 from student.day1.agent import day1_web_agent
 from student.day2.agent import day2_rag_agent
 from student.day3.agent import day3_gov_agent
+from student.day5.agent import day5_rag_agent
 
 # 프롬프트
 from .prompt import ORCHESTRATOR_DESC, ORCHESTRATOR_PROMPT
@@ -38,10 +39,13 @@ root_agent = Agent(
         # Day1: Web Search (Agent Tool)
         AgentTool(agent=day1_web_agent),
         
-        # ✅ Day2: RAG (Function Tool) - AgentTool 없이 직접 등록
+        # ✅ Day2: RAG raw 문서 검색
         AgentTool(agent=day2_rag_agent),
         
         # Day3: Government Support (Agent Tool)
         AgentTool(agent=day3_gov_agent),
+
+        # Day5: RAG 공모전 검색
+        AgentTool(agent=day5_rag_agent)
     ],
 )

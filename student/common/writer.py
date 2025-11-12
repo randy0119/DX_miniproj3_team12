@@ -146,6 +146,147 @@ def render_day3(query: str, payload: Dict[str, Any]) -> str:
                 lines.append(f"  - {a}")
     return "\n".join(lines)
 
+def render_day5(query: str, payload: dict) -> str:
+    """
+    Day5 공모전 RAG 검색 결과 렌더링
+    - 사용자 질의 표시
+    - 추천 공모전 표 형식 (실제 컬럼 구조 반영)
+    - 상세 정보 섹션
+    """
+    lines = []
+    lines.append("# 🎯 Day5 – 공모전 추천 결과")
+    lines.append("")
+    lines.append(f"**검색 질의:** {query}")
+    lines.append("")
+
+    # ── 초안 요약 (있는 경우)
+    answer = (payload or {}).get("answer") or ""
+    if answer:
+        lines.append("## 💡 추천 요약")
+        lines.append("")
+        lines.append(answer.strip())
+        lines.append("")
+
+    # ── 공모전 추천 목록 (Top-K)
+    contexts = (payload or {}).get("contexts") or []
+    if contexts:
+        lines.append("## 📋 추천 공모전 목록")
+        lines.append("")
+        lines.append("| 순위 | 공모전명 | 주최 | 분야 | 참가자격 | 마감일 | 매칭도 | 추천 근거 |")
+        lines.append("|:---:|----------|------|------|----------|--------|:------:|-----------|")
+        
+        for i, c in enumerate(contexts, 1):
+            # 매칭 점수
+            score = float(c.get('score', 0.0))
+            match_pct = f"{score*100:.1f}%"
+            
+            # 원본 텍스트에서 공모전 정보 파싱
+            raw_text = (
+                c.get("text")
+                or c.get("chunk")
+                or c.get("content")
+                or ""
+            )
+            
+            # 텍스트에서 각 필드 추출
+            def extract_field(text: str, field_name: str) -> str:
+                """[필드명]: 형식에서 값 추출"""
+                import re
+                pattern = rf'\[{field_name}\]:\s*(.+?)(?=\n\[|$)'
+                match = re.search(pattern, text, re.DOTALL)
+                if match:
+                    return match.group(1).strip().replace('\n', ' ')[:50]
+                return "-"
+            
+            contest_name = extract_field(raw_text, "공모전명")
+            host = extract_field(raw_text, "주최")
+            field = extract_field(raw_text, "분야")
+            eligibility = extract_field(raw_text, "참가 자격")
+            deadline = extract_field(raw_text, "마감일")
+            
+            # 추천 근거: 상세 내용 또는 전공 우대 부분
+            detail = extract_field(raw_text, "상세 내용")
+            if len(detail) > 80:
+                detail = detail[:80] + "..."
+            
+            lines.append(
+                f"| {i} | {contest_name} | {host} | {field} | {eligibility} | {deadline} | {match_pct} | {detail} |"
+            )
+        lines.append("")
+
+    # ── 상위 추천 공모전 상세 (Top 3)
+    if contexts and len(contexts) > 0:
+        lines.append("## 📌 상위 추천 공모전 상세")
+        lines.append("")
+        
+        for i, c in enumerate(contexts[:3], 1):
+            score = float(c.get('score', 0.0))
+            
+            # 원본 텍스트
+            raw_text = (
+                c.get("text")
+                or c.get("chunk")
+                or c.get("content")
+                or ""
+            )
+            
+            # 필드 추출 함수 (상세용)
+            def extract_field_detail(text: str, field_name: str) -> str:
+                """[필드명]: 형식에서 값 추출 (전체)"""
+                import re
+                pattern = rf'\[{field_name}\]:\s*(.+?)(?=\n\[|$)'
+                match = re.search(pattern, text, re.DOTALL)
+                if match:
+                    return match.group(1).strip()
+                return "-"
+            
+            contest_name = extract_field_detail(raw_text, "공모전명")
+            host = extract_field_detail(raw_text, "주최")
+            field = extract_field_detail(raw_text, "분야")
+            eligibility = extract_field_detail(raw_text, "참가 자격")
+            team_size = extract_field_detail(raw_text, "팀 규모")
+            deadline = extract_field_detail(raw_text, "마감일")
+            prize = extract_field_detail(raw_text, "상금 및 혜택")
+            preferred_major = extract_field_detail(raw_text, "전공 우대")
+            detail = extract_field_detail(raw_text, "상세 내용")
+            
+            lines.append(f"### {i}. {contest_name}")
+            lines.append("")
+            lines.append(f"**매칭도:** {score*100:.1f}% | **마감일:** {deadline}")
+            lines.append("")
+            
+            # 핵심 정보 표
+            lines.append("| 항목 | 내용 |")
+            lines.append("|------|------|")
+            lines.append(f"| 주최 | {host} |")
+            lines.append(f"| 분야 | {field} |")
+            lines.append(f"| 참가 자격 | {eligibility} |")
+            lines.append(f"| 팀 규모 | {team_size} |")
+            lines.append(f"| 상금 및 혜택 | {prize} |")
+            lines.append(f"| 전공 우대 | {preferred_major} |")
+            lines.append("")
+            
+            # 상세 내용
+            if detail and detail != "-":
+                lines.append("**📝 상세 내용**")
+                lines.append("")
+                lines.append(detail)
+                lines.append("")
+            
+            lines.append("---")
+            lines.append("")
+
+    # ── 검색 통계
+    if contexts:
+        lines.append("## 📊 검색 통계")
+        lines.append("")
+        lines.append(f"- **검색된 공모전 수:** {len(contexts)}개")
+        avg_score = sum(float(c.get('score', 0)) for c in contexts) / len(contexts) if contexts else 0
+        lines.append(f"- **평균 매칭도:** {avg_score*100:.1f}%")
+        lines.append("")
+
+    return "\n".join(lines)
+
 # --------- Envelope(머리말/푸터) ---------
 def _compose_envelope(kind: str, query: str, body_md: str, saved_path: str) -> str:
     header = dedent(f"""\
@@ -168,6 +309,8 @@ def render_enveloped(kind: str, query: str, payload: Dict[str, Any], saved_path:
         body = render_day2(query, payload)
     elif kind == "day3":
         body = render_day3(query, payload)
+    elif kind == "day5":
+        body = render_day5(query, payload)
     else:
         body = f"### 결과\n\n(알 수 없는 kind: {kind})"
     return _compose_envelope(kind, query, body, saved_path)
